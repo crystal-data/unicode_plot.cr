@@ -19,6 +19,7 @@ module UnicodePlot
     compact_labels : Bool = false,
     compact : Bool = false,
     title : String = "",
+    integer_labels : Bool = false,
   ) : Plot
     raise ArgumentError.new("text and heights must have the same length") unless text.size == heights.size
     raise ArgumentError.new("all values must be >= 0") unless heights.all? { |val| val >= 0 }
@@ -40,7 +41,11 @@ module UnicodePlot
     end
 
     char_width = width || default_width
-    fmt = ->(x : Float64) { nice_repr(x, unicode_exponent, thousands_separator) }
+    fmt = if integer_labels
+            ->(x : Float64) { nice_repr(x.round.to_i64, unicode_exponent, thousands_separator) }
+          else
+            ->(x : Float64) { bar_float_label(x, unicode_exponent, thousands_separator) }
+          end
     area = BarplotGraphics.new(
       final_heights, char_width,
       symbols: symbols, color: color, maximum: maximum,
@@ -120,7 +125,15 @@ module UnicodePlot
   end
 
   private def barplot_integer(text : Array(String), heights : Array(T), **kwargs) : Plot forall T
-    barplot(text, heights.map(&.to_f), **kwargs)
+    barplot(text, heights.map(&.to_f), **kwargs, integer_labels: true)
+  end
+
+  private def bar_float_label(value : Float64, unicode_exponent : Bool, thousands_separator : Char) : String
+    if value.finite? && value == value.round
+      "#{nice_repr(value.round.to_i64, unicode_exponent, thousands_separator)}.0"
+    else
+      nice_repr(value, unicode_exponent, thousands_separator)
+    end
   end
 
   # Get a representative color from a BarplotGraphics for legend labeling

@@ -265,8 +265,17 @@ describe UnicodePlot do
       p = UnicodePlot.barplot(["int", "float", "mixed"], [3, 3.0, 12])
       s = p.to_s
 
-      s.should contain(" 3 ")
-      s.should_not contain("3.0")
+      s.should contain(" 3.0 ")
+      s.should contain(" 12.0 ")
+    end
+
+    it "preserves explicit float labels for integer-valued floats" do
+      p = UnicodePlot.barplot(["a", "b", "c"], [3.0, 7.0, 12.0])
+      s = p.to_s
+
+      s.should contain(" 3.0 ")
+      s.should contain(" 7.0 ")
+      s.should contain(" 12.0 ")
     end
 
     it "accepts integer arrays when appending bar values" do
