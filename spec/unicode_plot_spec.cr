@@ -251,6 +251,32 @@ describe UnicodePlot do
       p = UnicodePlot.barplot({"a" => 1.0, "b" => 2.0})
       p.should be_a(UnicodePlot::Plot)
     end
+
+    it "routes integer arrays through the integer barplot overload" do
+      p = UnicodePlot.barplot(["a", "b", "c"], [3, 7_i64, 12])
+      s = p.to_s
+
+      s.should contain(" 3 ")
+      s.should contain(" 7 ")
+      s.should contain(" 12 ")
+    end
+
+    it "treats mixed numeric arrays as float values" do
+      p = UnicodePlot.barplot(["int", "float", "mixed"], [3, 3.0, 12])
+      s = p.to_s
+
+      s.should contain(" 3 ")
+      s.should_not contain("3.0")
+    end
+
+    it "accepts integer arrays when appending bar values" do
+      p = UnicodePlot.barplot(["int"], [3])
+      UnicodePlot.barplot!(p, ["more"], [7])
+      s = p.to_s
+
+      s.should contain(" 3 ")
+      s.should contain(" 7 ")
+    end
   end
 
   describe "histogram" do

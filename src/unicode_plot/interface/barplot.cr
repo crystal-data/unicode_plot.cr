@@ -65,8 +65,8 @@ module UnicodePlot
     plot
   end
 
-  def barplot(text : Array(String), heights : Array(Int32), **kwargs) : Plot
-    barplot(text, heights.map(&.to_f), **kwargs)
+  def barplot(text : Array(String), heights : Array(Int), **kwargs) : Plot
+    barplot_integer(text, heights, **kwargs)
   end
 
   def barplot(text : Array(String), heights : Array(Number), **kwargs) : Plot
@@ -78,9 +78,9 @@ module UnicodePlot
     barplot(pairs.map { |k, _| k }, pairs.map { |_, v| v }, **kwargs)
   end
 
-  def barplot(dict : Hash(String, Number), **kwargs) : Plot
+  def barplot(dict : Hash(String, T), **kwargs) : Plot forall T
     pairs = dict.to_a.sort_by { |k, _| k }
-    barplot(pairs.map { |k, _| k }, pairs.map { |_, v| v.to_f }, **kwargs)
+    barplot(pairs.map { |k, _| k }, pairs.map { |_, v| v }, **kwargs)
   end
 
   def barplot!(
@@ -103,12 +103,24 @@ module UnicodePlot
     plot
   end
 
+  def barplot!(plot : Plot, text : Array(String), heights : Array(Int), **kwargs) : Plot
+    barplot!(plot, text, heights.map(&.to_f), **kwargs)
+  end
+
   def barplot!(plot : Plot, text : Array(String), heights : Array(Number), **kwargs) : Plot
     barplot!(plot, text, heights.map(&.to_f), **kwargs)
   end
 
   def barplot!(plot : Plot, label : String, height : Float64, **kwargs) : Plot
     barplot!(plot, [label], [height], **kwargs)
+  end
+
+  def barplot!(plot : Plot, label : String, height : Number, **kwargs) : Plot
+    barplot!(plot, [label], [height.to_f], **kwargs)
+  end
+
+  private def barplot_integer(text : Array(String), heights : Array(T), **kwargs) : Plot forall T
+    barplot(text, heights.map(&.to_f), **kwargs)
   end
 
   # Get a representative color from a BarplotGraphics for legend labeling
