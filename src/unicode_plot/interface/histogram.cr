@@ -300,7 +300,7 @@ module UnicodePlot
       border: border, margin: margin, padding: padding,
       labels: labels, unicode_exponent: unicode_exponent,
       thousands_separator: thousands_separator, symbols: symbols,
-      width: width
+      width: width, integer_labels: true
     )
     plot
   end
