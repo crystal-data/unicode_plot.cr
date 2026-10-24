@@ -208,7 +208,8 @@ module UnicodePlot
   private def raw_axis_limits(values : Array(Float64), requested : {Float64, Float64},
                               scale : Symbol | Proc(Float64, Float64),
                               transformed : {Float64, Float64}) : {Float64, Float64}
-    return requested unless requested == {0.0, 0.0}
+    auto = requested == {0.0, 0.0}
+    return requested unless auto || requested[0] == requested[1]
     if scale.is_a?(Symbol)
       if inverse = ISCALES[scale]?
         lower = inverse.call(transformed[0])
@@ -216,6 +217,7 @@ module UnicodePlot
         return {lower, upper} if lower.finite? && upper.finite? && lower < upper
       end
     end
+    return expand_equal_limits(requested[0]) unless auto
     finite = values.select(&.finite?)
     return {-1.0, 1.0} if finite.empty?
     lower, upper = finite.min, finite.max

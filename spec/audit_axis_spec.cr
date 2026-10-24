@@ -52,6 +52,19 @@ describe "audited axis and line behavior" do
     painted_cells(vertical).should eq(8)
   end
 
+  it "spans the expanded view when an explicit axis has equal endpoints" do
+    plot = UnicodePlot.scatterplot([1.0], [-1e20],
+      xlim: {1.0, 1.0}, ylim: {-1e20, 1e20}, grid: true, width: 20, height: 8)
+    plot.raw_xlim.should eq({0.0, 2.0})
+    painted_cells(plot).should be >= 20
+
+    scaled = UnicodePlot.scatterplot([1.0], [-1.0],
+      xlim: {1.0, 1.0}, ylim: {-2.0, 2.0}, xscale: :log10,
+      grid: true, width: 20, height: 8)
+    scaled.raw_xlim.should eq({0.1, 10.0})
+    painted_cells(scaled).should be >= 20
+  end
+
   it "clips crossing and long lines before drawing and includes both endpoints" do
     forward = UnicodePlot.lineplot([-1000.0, 0.5], [0.5, 0.5],
       xlim: {0.0, 1.0}, ylim: {0.0, 1.0}, grid: false)
