@@ -56,6 +56,16 @@ describe "audited numeric and matrix behavior" do
     data[1][1..2].should eq([3.0, 4.0])
   end
 
+  it "rejects negative heatmap coordinate factors instead of dropping data" do
+    values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    expect_raises(ArgumentError, /xfact/) do
+      UnicodePlot.heatmap(values, xfact: -1.0)
+    end
+    expect_raises(ArgumentError, /yfact/) do
+      UnicodePlot.heatmap(values, yfact: -1.0)
+    end
+  end
+
   it "renders cells without source data with Julia's black background" do
     plot = UnicodePlot.heatmap([[1.0, 2.0], [3.0, 4.0]],
       xlim: {50.0, 60.0}, height: 2, width: 2, labels: false)

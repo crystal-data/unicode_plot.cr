@@ -161,6 +161,9 @@ z : Array(Array(Float64)),
               width : Int32? = nil,
               fix_ar : Bool = false,
               out_stream : IO? = nil,) : Plot
+    raise ArgumentError.new("xfact must be non-negative") if xfact && xfact < 0.0
+    raise ArgumentError.new("yfact must be non-negative") if yfact && yfact < 0.0
+
     matrix = MatrixView.new(z)
 
     data_nrows = matrix.nrows
