@@ -32,5 +32,5 @@ require "./unicode_plot/interface/stairs"
 module UnicodePlot
   extend self
 
-  VERSION = "0.1.0"
+  VERSION = "0.1.1"
 end
