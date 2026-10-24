@@ -75,30 +75,45 @@ module UnicodePlot
 
   # ameba:enable Metrics/CyclomaticComplexity
 
-  # Nearest-neighbour resample z_sub (data_nrows × data_ncols) to (char_height × disp_w).
+  # Nearest-neighbour resampling in the original data coordinate system.
   private def resample_heatmap(
-    z_sub : Array(Array(Float64)),
+    z : Array(Array(Float64)), x_coords : Array(Float64), y_coords : Array(Float64),
+    xlim : {Float64, Float64}, ylim : {Float64, Float64},
+    x_step : Float64, y_step : Float64,
     char_height : Int32, disp_w : Int32,
   ) : Array(Array(Float64))
+    return Array.new(char_height) { Array.new(disp_w, Float64::NAN) } if x_coords.empty? || y_coords.empty?
+
+    Array.new(char_height) do |pixel_idx|
+      y = char_height == 1 ? (ylim[0] + ylim[1]) / 2.0 : ylim[0] + pixel_idx.to_f * (ylim[1] - ylim[0]) / (char_height - 1)
+      row_idx = heatmap_source_index(y, y_coords, y_step)
+      Array.new(disp_w) do |col_idx|
+        x = disp_w == 1 ? (xlim[0] + xlim[1]) / 2.0 : xlim[0] + col_idx.to_f * (xlim[1] - xlim[0]) / (disp_w - 1)
+        source_col = heatmap_source_index(x, x_coords, x_step)
+        row_idx && source_col ? z[row_idx][source_col] : Float64::NAN
+      end
+    end
+  end
+
+  private def heatmap_source_index(value : Float64, coords : Array(Float64), step : Float64) : Int32?
+    return unless step > 0.0 && value >= coords.first - step / 2.0 && value <= coords.last + step / 2.0
+    index = ((value - coords.first) / step).round.to_i32
+    index.clamp(0, coords.size - 1)
+  end
+
+  private def resample_heatmap_unscaled(z_sub : Array(Array(Float64)),
+                                      char_height : Int32, disp_w : Int32) : Array(Array(Float64))
     data_nrows = z_sub.size
     data_ncols = z_sub.empty? ? 0 : z_sub[0].size
     return Array.new(char_height) { Array.new(disp_w, Float64::NAN) } if data_nrows == 0 || data_ncols == 0
 
     Array.new(char_height) do |pixel_idx|
-      row_idx = if data_nrows == 1 || char_height == 1
-                  0
-                else
-                  (pixel_idx.to_f * (data_nrows - 1) / (char_height - 1)).round.to_i32.clamp(0, data_nrows - 1)
-                end
-
-      src_row = z_sub[row_idx]
+      row_idx = data_nrows == 1 || char_height == 1 ? 0 :
+        (pixel_idx.to_f * (data_nrows - 1) / (char_height - 1)).round.to_i32.clamp(0, data_nrows - 1)
       Array.new(disp_w) do |col_idx|
-        col_idx = if data_ncols == 1 || disp_w == 1
-                    0
-                  else
-                    (col_idx.to_f * (data_ncols - 1) / (disp_w - 1)).round.to_i32.clamp(0, data_ncols - 1)
-                  end
-        src_row[col_idx]? || Float64::NAN
+        source_col = data_ncols == 1 || disp_w == 1 ? 0 :
+          (col_idx.to_f * (data_ncols - 1) / (disp_w - 1)).round.to_i32.clamp(0, data_ncols - 1)
+        z_sub[row_idx][source_col]
       end
     end
   end
@@ -240,8 +255,13 @@ z : Array(Array(Float64)),
 
     fn = colormap_callback(colormap)
 
-    # Resample z_sub to char_height pixel-rows × char_width columns.
-    data = resample_heatmap(z_sub, char_height, char_width)
+    # Preserve source coordinates when the visible range extends past the data.
+    data = if eff_xfact > 0.0 && eff_yfact > 0.0
+             resample_heatmap(z, x_arr, y_arr, eff_xlim, eff_ylim,
+               eff_xfact, eff_yfact, char_height, char_width)
+           else
+             resample_heatmap_unscaled(z_sub, char_height, char_width)
+           end
 
     area = HeatmapGraphics.new(data, fn, zmin, zmax, !data.empty?, array)
 

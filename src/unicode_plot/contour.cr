@@ -186,7 +186,12 @@ module UnicodePlot
     end
 
     private def self.normalize_coord(value : Float64) : Float64
-      value.abs <= 1e-15 ? 0.0 : value
+      value == 0.0 ? 0.0 : value
+    end
+
+    private def self.finite_cell?(z : MatrixView(T), row : Int32, col : Int32) : Bool forall T
+      z[row, col].to_f64.finite? && z[row, col + 1].to_f64.finite? &&
+        z[row + 1, col].to_f64.finite? && z[row + 1, col + 1].to_f64.finite?
     end
 
     private def self.trace_contour(
@@ -220,7 +225,7 @@ module UnicodePlot
         end
 
         reverse_start, reverse_edge = advance_edge(start_cell, starting_edge)
-        if in_bounds_cell?(reverse_start, row_range, col_range)
+        if in_bounds_cell?(reverse_start, row_range, col_range) && finite_cell?(z, reverse_start[0], reverse_start[1])
           contour.reverse!
           chase!(cells, contour, x, y, z, level, reverse_start, reverse_edge, row_range, col_range)
         end
@@ -255,6 +260,7 @@ module UnicodePlot
 
         break unless in_bounds_cell?(current, row_range, col_range)
         break if current == start_cell && entry_edge == loopback_edge
+        break unless finite_cell?(z, current[0], current[1])
       end
 
       current

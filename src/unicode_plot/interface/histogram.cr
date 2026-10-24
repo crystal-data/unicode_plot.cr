@@ -43,24 +43,38 @@ module UnicodePlot
     symbols : Array(Char) = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'],
     width : Int32? = nil,
   ) : Plot
+    raise ArgumentError.new("closed must be :left or :right") unless closed == :left || closed == :right
     if vertical
       unless xscale.is_a?(Symbol) && xscale == :identity
         raise ArgumentError.new("xscale is not supported for vertical histogram")
       end
     end
 
-    return barplot([] of String, [] of Float64) if data.empty?
+    if data.empty?
+      return barplot([] of String, [] of Float64,
+        color: color, title: title, xlabel: xlabel, border: border,
+        margin: margin, padding: padding, labels: labels,
+        unicode_exponent: unicode_exponent, thousands_separator: thousands_separator,
+        symbols: symbols, width: width)
+    end
 
     raw_data = data.select(&.finite?)
-    return barplot([] of String, [] of Float64) if raw_data.empty?
+    if raw_data.empty?
+      return barplot([] of String, [] of Float64,
+        color: color, title: title, xlabel: xlabel, border: border,
+        margin: margin, padding: padding, labels: labels,
+        unicode_exponent: unicode_exponent, thousands_separator: thousands_separator,
+        symbols: symbols, width: width)
+    end
 
     n_bins = histogram_bin_count(raw_data, nbins)
     dmin, dmax = histogram_data_bounds(raw_data)
 
     if vertical
       histogram_vertical_plot(raw_data, n_bins, dmin, dmax,
-        stats: stats, xlabel: xlabel,
+        stats: stats, xlabel: xlabel, closed: closed,
         color: color, title: title,
+        margin: margin, padding: padding, labels: labels,
         unicode_exponent: unicode_exponent,
         thousands_separator: thousands_separator,
         width: width)
@@ -82,11 +96,39 @@ module UnicodePlot
 
   private def histogram_data_bounds(data : Array(Float64)) : {Float64, Float64}
     dmin, dmax = data.min, data.max
-    if dmin == dmax
-      dmin -= 1.0
-      dmax += 1.0
+    dmin == dmax ? expand_equal_limits(dmin) : {dmin, dmax}
+  end
+
+  # Search the actual Float64 edges so division rounding cannot move an exact edge.
+  private def histogram_bin_index(edges : Array(Float64), value : Float64, closed : Symbol) : Int32
+    lower = 0
+    upper = edges.size
+    while lower < upper
+      middle = lower + (upper - lower) // 2
+      if edges[middle] < value || (closed == :left && edges[middle] == value)
+        lower = middle + 1
+      else
+        upper = middle
+      end
     end
-    {dmin, dmax}
+    (lower - 1).clamp(0, edges.size - 2)
+  end
+
+  private def histogram_bins(data : Array(Float64), n_bins : Int32,
+                             dmin : Float64, dmax : Float64,
+                             closed : Symbol) : {Array(Float64), Array(Float64)}
+    step = nice_hist_step((dmax - dmin) / n_bins)
+    edge_min = (dmin / step).floor * step
+    edge_min -= step if closed == :right && edge_min >= data.min
+    n_actual = Math.max(((dmax - edge_min) / step).ceil.to_i32, 2)
+    edges = (0..n_actual).map { |i| edge_min + i * step }
+    while closed == :left ? edges.last <= data.max : edges.last < data.max
+      n_actual += 1
+      edges << edge_min + n_actual * step
+    end
+    counts = Array(Float64).new(n_actual, 0.0)
+    data.each { |value| counts[histogram_bin_index(edges, value, closed)] += 1.0 }
+    {edges, counts}
   end
 
   private def histogram_vertical_plot(
@@ -97,28 +139,17 @@ module UnicodePlot
     *,
     stats : Bool,
     xlabel : String,
+    closed : Symbol,
     color : Symbol | UInt32 | {Int32, Int32, Int32},
     title : String,
+    margin : Int32,
+    padding : Int32,
+    labels : Bool,
     unicode_exponent : Bool,
     thousands_separator : Char,
     width : Int32?,
   ) : Plot
-    raw_step = (dmax - dmin) / n_bins
-    nstep = nice_hist_step(raw_step)
-    edge_min = (dmin / nstep).floor * nstep
-    n_actual = ((dmax - edge_min) / nstep).ceil.to_i32
-    n_actual = Math.max(n_actual, 2)
-    edge_max = edge_min + n_actual * nstep
-    if edge_max <= dmax
-      n_actual += 1
-      edge_max += nstep
-    end
-
-    vert_counts = Array(Float64).new(n_actual, 0.0)
-    data.each do |v|
-      idx = ((v - edge_min) / nstep).floor.to_i32.clamp(0, n_actual - 1)
-      vert_counts[idx] += 1.0
-    end
+    edges, vert_counts = histogram_bins(data, n_bins, dmin, dmax, closed)
 
     info = if stats && xlabel.empty?
              mu = data.sum / data.size
@@ -128,8 +159,9 @@ module UnicodePlot
              xlabel
            end
 
-    histogram_vertical(vert_counts, edge_min, edge_max, nstep, n_actual,
+    histogram_vertical(vert_counts, edges,
       color: color, title: title, xlabel: info,
+      margin: margin, padding: padding, labels: labels,
       unicode_exponent: unicode_exponent, thousands_separator: thousands_separator, width: width)
   end
 
@@ -153,25 +185,9 @@ module UnicodePlot
     symbols : Array(Char),
     width : Int32?,
   ) : Plot
-    raw_step = (dmax - dmin) / n_bins
-    bin_width = nice_hist_step(raw_step)
-    edge_min = (dmin / bin_width).floor * bin_width
-    n_actual = ((dmax - edge_min) / bin_width).ceil.to_i32
-    n_actual = Math.max(n_actual, 2)
-    n_actual += 1 if edge_min + n_actual * bin_width <= dmax
+    edges, counts = histogram_bins(data, n_bins, dmin, dmax, closed)
 
-    counts = Array(Float64).new(n_actual, 0.0)
-    data.each do |v|
-      idx = if closed == :right
-              ((v - edge_min) / bin_width).ceil.to_i32 - 1
-            else
-              ((v - edge_min) / bin_width).floor.to_i32
-            end
-      idx = idx.clamp(0, n_actual - 1)
-      counts[idx] += 1.0
-    end
-
-    histogram_horizontal(counts, edge_min, bin_width, n_actual,
+    histogram_horizontal(counts, edges,
       closed: closed,
       xscale: xscale,
       color: color, title: title, xlabel: xlabel,
@@ -181,11 +197,14 @@ module UnicodePlot
   end
 
   private def histogram_vertical(
-    counts : Array(Float64), edge_min : Float64, edge_max : Float64,
-    bin_width : Float64, n_bins : Int32,
+    counts : Array(Float64), edges : Array(Float64),
     *, color : Symbol | UInt32 | {Int32, Int32, Int32}, title : String, xlabel : String,
+    margin : Int32, padding : Int32, labels : Bool,
     unicode_exponent : Bool, thousands_separator : Char, width : Int32?,
   ) : Plot
+    edge_min = edges.first
+    edge_max = edges.last
+    n_bins = counts.size
     max_val = counts.max.to_f
     max_val = 1.0 if max_val <= 0.0
     actual_width = width || n_bins
@@ -197,6 +216,7 @@ module UnicodePlot
       title: title, xlabel: xlabel,
       border: :corners,
       width: actual_width,
+      margin: margin, padding: padding, labels: labels,
       ylim: {0.0, max_val},
       grid: false,
       xticks: false,
@@ -214,17 +234,16 @@ module UnicodePlot
     bar_color = plot_color(color)
     vbar = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
     (1..can.ncols).each do |col|
-      draw_vhist_col!(can, col, counts, edge_min, edge_max, n_bins, max_val, bar_color, vbar)
+      draw_vhist_col!(can, col, counts, edges, max_val, bar_color, vbar)
     end
     plot
   end
 
-  private def draw_vhist_col!(can, col, counts, edge_min, edge_max, n_bins, max_val, bar_color, vbar)
+  private def draw_vhist_col!(can, col, counts, edges, max_val, bar_color, vbar)
     # Map column to bin using the intended edge coordinate system (not canvas coords,
     # which may be rounded by plotting_range_narrow).
-    x_mid = edge_min + (col - 0.5) * (edge_max - edge_min) / can.ncols.to_f
-    bin_idx = ((x_mid - edge_min) / ((edge_max - edge_min) / n_bins)).floor.to_i32
-    return if bin_idx < 0 || bin_idx >= n_bins
+    x_mid = edges.first + (col - 0.5) * (edges.last - edges.first) / can.ncols.to_f
+    bin_idx = histogram_bin_index(edges, x_mid, :left)
     h = counts[bin_idx].to_f
     return unless h > 0
     h_chars = h / max_val * can.nrows.to_f
@@ -261,17 +280,19 @@ module UnicodePlot
   end
 
   private def histogram_horizontal(
-    counts : Array(Float64), dmin : Float64, bin_width : Float64, n_bins : Int32,
+    counts : Array(Float64), exact_edges : Array(Float64),
     *, closed : Symbol, xscale : Symbol | Proc(Float64, Float64), color : Symbol | UInt32 | {Int32, Int32, Int32}, title : String, xlabel : String,
     border : Symbol, margin : Int32, padding : Int32, labels : Bool,
     unicode_exponent : Bool, thousands_separator : Char,
     symbols : Array(Char), width : Int32?,
   ) : Plot
+    n_bins = counts.size
+    bin_width = exact_edges[1] - exact_edges[0]
     l_chr = closed == :right ? '(' : '['
     r_chr = closed == :right ? ']' : ')'
 
     # Compute edge strings with decimal-point alignment (Julia-style padding)
-    edges = (0..n_bins).map { |i| hist_edge_round(dmin + i * bin_width, bin_width) }
+    edges = exact_edges.map { |edge| hist_edge_round(edge, bin_width) }
     edge_strs = edges.map { |v| hist_edge_str(v) }
     pad_left = 0
     pad_right = 0

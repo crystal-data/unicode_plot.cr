@@ -120,17 +120,20 @@ module UnicodePlot
         bg = upper_val ? @colormap_fn.call(upper_val, @zmin, @zmax) : INVALID_COLOR
 
         if use_color
-          if fg != INVALID_COLOR || bg != INVALID_COLOR
-            io << UnicodePlot.ansi_fg_escape(fg) if fg != INVALID_COLOR
-            io << UnicodePlot.ansi_bg_escape(bg) if bg != INVALID_COLOR
-            io << HALF_BLOCK
-            io << ANSI_RESET
+          if fg != INVALID_COLOR && bg != INVALID_COLOR
+            io << UnicodePlot.ansi_fg_escape(fg)
+            io << UnicodePlot.ansi_bg_escape(bg)
+            io << HALF_BLOCK << ANSI_RESET
+          elsif fg != INVALID_COLOR
+            io << UnicodePlot.ansi_fg_escape(fg) << HALF_BLOCK << ANSI_RESET
+          elsif bg != INVALID_COLOR
+            io << UnicodePlot.ansi_fg_escape(bg) << '▀' << ANSI_RESET
           else
             io << ' '
           end
         else
-          # No color: just output the character (▄) so strip-ANSI comparison works
-          io << HALF_BLOCK
+          io << (fg == INVALID_COLOR && bg == INVALID_COLOR ? ' ' :
+            fg == INVALID_COLOR ? '▀' : HALF_BLOCK)
         end
       end
     end
