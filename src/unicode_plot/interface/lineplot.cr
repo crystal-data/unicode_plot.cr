@@ -593,9 +593,7 @@ module UnicodePlot
   end
 
   def lineplot!(plot : Plot, intercept : Number, slope : Number, **kwargs) : Plot
-    can = plot.canvas
-    xmin = can.origin_x
-    xmax = can.origin_x + can.width
+    xmin, xmax = plot.raw_xlim || {plot.canvas.origin_x, plot.canvas.origin_x + plot.canvas.width}
     intercept_f = intercept.to_f64
     slope_f = slope.to_f64
     lineplot!(plot,
@@ -607,8 +605,8 @@ module UnicodePlot
   def lineplot!(plot : Plot, f : Float64 -> Float64, **kwargs) : Plot
     can = plot.canvas
     n = 3 * can.ncols
-    span = can.width
-    x = (0..n).map { |i| can.origin_x + span * i.to_f / n }
+    xmin, xmax = plot.raw_xlim || {can.origin_x, can.origin_x + can.width}
+    x = (0..n).map { |i| xmin + (xmax - xmin) * i.to_f / n }
     lineplot!(plot, x, x.map { |v| f.call(v) }, **kwargs)
   end
 
@@ -628,13 +626,15 @@ module UnicodePlot
 
   def vline!(plot : Plot, x : Float64, y : Array(Float64)? = nil, **kwargs) : Plot
     can = plot.canvas
-    ys = y || linspace(can.origin_y, can.origin_y + can.height, can.nrows)
+    ymin, ymax = plot.raw_ylim || {can.origin_y, can.origin_y + can.height}
+    ys = y || linspace(ymin, ymax, can.nrows)
     lineplot!(plot, Array.new(ys.size, x), ys, **kwargs)
   end
 
   def hline!(plot : Plot, y : Float64, x : Array(Float64)? = nil, **kwargs) : Plot
     can = plot.canvas
-    xs = x || linspace(can.origin_x, can.origin_x + can.width, can.ncols)
+    xmin, xmax = plot.raw_xlim || {can.origin_x, can.origin_x + can.width}
+    xs = x || linspace(xmin, xmax, can.ncols)
     lineplot!(plot, xs, Array.new(xs.size, y), **kwargs)
   end
 

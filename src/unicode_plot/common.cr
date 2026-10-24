@@ -379,30 +379,49 @@ module UnicodePlot
     if delta == 0.0 || !delta.finite?
       return {-Float64::INFINITY, Float64::INFINITY}
     end
-    {round_down_subtick(xmin, delta), round_up_subtick(xmax, delta)}
+    lower = round_down_subtick(xmin, delta)
+    upper = round_up_subtick(xmax, delta)
+    lower.finite? && upper.finite? && lower < upper ? {lower, upper} : {xmin, xmax}
+  end
+
+  private def expand_equal_limits(value : Float64) : {Float64, Float64}
+    delta = Math.max(value.abs * 0.1, 1.0)
+    lower = value - delta
+    upper = value + delta
+    lower = value.prev_float unless lower.finite? && lower < value
+    upper = value.next_float unless upper.finite? && upper > value
+    lower = value if !lower.finite? && upper.finite?
+    upper = value if !upper.finite? && lower.finite?
+    {lower, upper}
   end
 
   def extend_limits(
     vec : Enumerable(Float64),
     lims : {Float64, Float64},
-    scale : Symbol = :identity,
+    scale : Symbol | Proc(Float64, Float64) = :identity,
   ) : {Float64, Float64}
     mi, ma = lims[0], lims[1]
     explicit = !(mi == 0.0 && ma == 0.0)
-    unless explicit
-      arr = vec.to_a.select(&.finite?)
-      return {-1.0, 1.0} if arr.empty?
-      mi, ma = arr.min, arr.max
-    end
+    fn = scale_callback(scale)
+    values = if explicit
+               lower = fn.call(mi)
+               upper = fn.call(ma)
+               unless lower.finite? && upper.finite? && lower <= upper
+                 raise ArgumentError.new("axis limits must be finite and increasing after scaling")
+               end
+               [lower, upper]
+             else
+               vec.compact_map { |v| fn.call(v) if v.finite? }.select(&.finite?).to_a
+             end
+    return {-1.0, 1.0} if values.empty?
+    mi, ma = values.min, values.max
     if mi == ma
-      mi -= 1.0
-      ma += 1.0
+      mi, ma = expand_equal_limits(mi)
     end
     if scale == :identity
       explicit ? {mi, ma} : plotting_range_narrow(mi, ma)
     else
-      fn = scale_callback(scale)
-      {fn.call(mi), fn.call(ma)}
+      {mi, ma}
     end
   end
 

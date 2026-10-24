@@ -32,6 +32,8 @@ module UnicodePlot
     getter decorations : Hash(Symbol, String)
     getter colors_deco : Hash(Symbol, UInt32)
     getter colormap : Colormap
+    property raw_xlim : {Float64, Float64}? = nil
+    property raw_ylim : {Float64, Float64}? = nil
 
     def initialize(
       @graphics : GraphicsArea,
@@ -203,6 +205,23 @@ module UnicodePlot
     end
   end
 
+  private def raw_axis_limits(values : Array(Float64), requested : {Float64, Float64},
+                              scale : Symbol | Proc(Float64, Float64),
+                              transformed : {Float64, Float64}) : {Float64, Float64}
+    return requested unless requested == {0.0, 0.0}
+    if scale.is_a?(Symbol)
+      if inverse = ISCALES[scale]?
+        lower = inverse.call(transformed[0])
+        upper = inverse.call(transformed[1])
+        return {lower, upper} if lower.finite? && upper.finite? && lower < upper
+      end
+    end
+    finite = values.select(&.finite?)
+    return {-1.0, 1.0} if finite.empty?
+    lower, upper = finite.min, finite.max
+    lower == upper ? expand_equal_limits(lower) : {lower, upper}
+  end
+
   # Create a Plot from x/y data, building the canvas automatically.
   # ameba:disable Metrics/CyclomaticComplexity
   def build_plot(
@@ -239,11 +258,10 @@ module UnicodePlot
     unicode_exponent : Bool = true,
     thousands_separator : Char = ' ',
   ) : Plot
-    xs_sym = xscale.is_a?(Symbol) ? xscale.as(Symbol) : :identity
-    ys_sym = yscale.is_a?(Symbol) ? yscale.as(Symbol) : :identity
-
-    mx, bx = extend_limits(x, xlim, xs_sym)
-    my, by = extend_limits(y, ylim, ys_sym)
+    mx, bx = extend_limits(x, xlim, xscale)
+    my, by = extend_limits(y, ylim, yscale)
+    raw_xmin, raw_xmax = raw_axis_limits(x, xlim, xscale, {mx, bx})
+    raw_ymin, raw_ymax = raw_axis_limits(y, ylim, yscale, {my, by})
 
     h = (height || default_height).clamp(min_height, Int32::MAX)
     w = (width || default_width).clamp(min_width, Int32::MAX)
@@ -277,6 +295,12 @@ module UnicodePlot
             yflip: yflip, xflip: xflip,
             yscale: yscale.is_a?(Symbol) ? yscale.as(Symbol) : yscale.as(Proc(Float64, Float64)),
             xscale: xscale.is_a?(Symbol) ? xscale.as(Symbol) : xscale.as(Proc(Float64, Float64)))
+          when :density then DensityCanvas.new(h, w,
+            origin_y: my, origin_x: mx,
+            height: by - my, width: bx - mx,
+            blend: blend, visible: (w >= 0),
+            yflip: yflip, xflip: xflip,
+            yscale: yscale, xscale: xscale)
           else
             raise ArgumentError.new("unknown canvas: #{canvas_type}")
           end
@@ -288,6 +312,8 @@ module UnicodePlot
       labels: labels, colorbar: colorbar, colorbar_border: colorbar_border,
       colorbar_lim: colorbar_lim, unicode_exponent: unicode_exponent,
       thousands_separator: thousands_separator)
+    plot.raw_xlim = {raw_xmin, raw_xmax}
+    plot.raw_ylim = {raw_ymin, raw_ymax}
 
     bc = ansi_color(border_color)
     if xticks
@@ -316,15 +342,11 @@ module UnicodePlot
     end
 
     if grid
-      my_val = my
-      by_val = by
-      mx_val = mx
-      bx_val = bx
-      if my_val < 0.0 && by_val > 0.0
-        can.lines!(mx_val, 0.0, bx_val, 0.0, ansi_color(border_color), true)
+      if raw_ymin < 0.0 && raw_ymax > 0.0
+        can.lines!(raw_xmin, 0.0, raw_xmax, 0.0, ansi_color(border_color), true)
       end
-      if mx_val < 0.0 && bx_val > 0.0
-        can.lines!(0.0, my_val, 0.0, by_val, ansi_color(border_color), true)
+      if raw_xmin < 0.0 && raw_xmax > 0.0
+        can.lines!(0.0, raw_ymin, 0.0, raw_ymax, ansi_color(border_color), true)
       end
     end
 

@@ -169,8 +169,8 @@ module UnicodePlot
       sy = scale_y_to_pixel(y)
       plot_pixel_if_visible(
         sx, sy, color, blend,
-        Int32::MIN.to_f, Int32::MAX.to_f,
-        Int32::MIN.to_f, Int32::MAX.to_f,
+        0.0, @pixel_width.to_f,
+        0.0, @pixel_height.to_f,
       )
       self
     end
@@ -208,42 +208,50 @@ module UnicodePlot
       self
     end
 
-    # Digital differential analyser (DDA) line drawing
+    # Liang-Barsky clipping in pixel coordinates, before rasterization.
+    private def clip_line_to_pixels(x1 : Float64, y1 : Float64, x2 : Float64, y2 : Float64) : {Float64, Float64, Float64, Float64}?
+      return unless x1.finite? && y1.finite? && x2.finite? && y2.finite?
+      dx = x2 - x1
+      dy = y2 - y1
+      return unless dx.finite? && dy.finite?
+      first = 0.0
+      last = 1.0
+      { {-dx, x1}, {dx, @pixel_width.to_f - x1}, {-dy, y1}, {dy, @pixel_height.to_f - y1} }.each do |p, q|
+        if p == 0.0
+          return if q < 0.0
+        else
+          t = q / p
+          if p < 0.0
+            first = Math.max(first, t)
+          else
+            last = Math.min(last, t)
+          end
+          return if first > last
+        end
+      end
+      {x1 + first * dx, y1 + first * dy, x1 + last * dx, y1 + last * dy}
+    end
+
     def lines!(
       x1 : Float64, y1 : Float64,
       x2 : Float64, y2 : Float64,
       color : UInt32,
       blend : Bool,
     ) : self
-      return self unless valid_x?(x1) || valid_x?(x2)
-      return self unless valid_y?(y1) || valid_y?(y2)
-
-      delta_x = scale_x_to_pixel(x2) - (cur_x = scale_x_to_pixel(x1))
-      return self unless delta_x.finite?
-      delta_y = scale_y_to_pixel(y2) - (cur_y = scale_y_to_pixel(y1))
-      return self unless delta_y.finite?
-
-      nsteps = Math.min(Math.max(delta_x.abs, delta_y.abs), Int32::MAX.to_f)
-      len = Math.min(nsteps.floor.to_i32, Int16::MAX.to_i32)
-
-      min_px = 0.0
-      min_py = 0.0
-      max_px = @pixel_width.to_f
-      max_py = @pixel_height.to_f
-
-      if nsteps == 0.0
-        plot_pixel_if_visible(cur_x, cur_y, color, blend, min_px, max_px, min_py, max_py)
-        return self
-      end
-
-      dx = delta_x / nsteps
-      dy = delta_y / nsteps
-
-      plot_pixel_if_visible(cur_x, cur_y, color, blend, min_px, max_px, min_py, max_py)
-      len.times do
-        cur_x += dx
-        cur_y += dy
-        plot_pixel_if_visible(cur_x, cur_y, color, blend, min_px, max_px, min_py, max_py)
+      clipped = clip_line_to_pixels(
+        scale_x_to_pixel(x1), scale_y_to_pixel(y1),
+        scale_x_to_pixel(x2), scale_y_to_pixel(y2))
+      return self unless clipped
+      sx, sy, ex, ey = clipped
+      steps = Math.max((ex - sx).abs, (ey - sy).abs).ceil.to_i32
+      if steps == 0
+        plot_pixel_if_visible(sx, sy, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+      else
+        (0..steps).each do |i|
+          t = i.to_f / steps
+          plot_pixel_if_visible(sx + (ex - sx) * t, sy + (ey - sy) * t,
+            color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+        end
       end
       self
     end
