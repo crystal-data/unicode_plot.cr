@@ -81,18 +81,27 @@ module UnicodePlot
     xlim : {Float64, Float64}, ylim : {Float64, Float64},
     x_step : Float64, y_step : Float64,
     char_height : Int32, disp_w : Int32,
-  ) : Array(Array(Float64))
-    return Array.new(char_height) { Array.new(disp_w, Float64::NAN) } if x_coords.empty? || y_coords.empty?
+  ) : {Array(Array(Float64)), Array(Array(Bool))}
+    present = Array.new(char_height) { Array.new(disp_w, false) }
+    if x_coords.empty? || y_coords.empty?
+      return {Array.new(char_height) { Array.new(disp_w, Float64::NAN) }, present}
+    end
 
-    Array.new(char_height) do |pixel_idx|
+    data = Array.new(char_height) do |pixel_idx|
       y = char_height == 1 ? (ylim[0] + ylim[1]) / 2.0 : ylim[0] + pixel_idx.to_f * (ylim[1] - ylim[0]) / (char_height - 1)
       row_idx = heatmap_source_index(y, y_coords, y_step)
       Array.new(disp_w) do |col_idx|
         x = disp_w == 1 ? (xlim[0] + xlim[1]) / 2.0 : xlim[0] + col_idx.to_f * (xlim[1] - xlim[0]) / (disp_w - 1)
         source_col = heatmap_source_index(x, x_coords, x_step)
-        row_idx && source_col ? z[row_idx][source_col] : Float64::NAN
+        if row_idx && source_col
+          present[pixel_idx][col_idx] = true
+          z[row_idx][source_col]
+        else
+          Float64::NAN
+        end
       end
     end
+    {data, present}
   end
 
   private def heatmap_source_index(value : Float64, coords : Array(Float64), step : Float64) : Int32?
@@ -102,20 +111,24 @@ module UnicodePlot
   end
 
   private def resample_heatmap_unscaled(z_sub : Array(Array(Float64)),
-                                      char_height : Int32, disp_w : Int32) : Array(Array(Float64))
+                                        char_height : Int32, disp_w : Int32) : {Array(Array(Float64)), Array(Array(Bool))}
     data_nrows = z_sub.size
     data_ncols = z_sub.empty? ? 0 : z_sub[0].size
-    return Array.new(char_height) { Array.new(disp_w, Float64::NAN) } if data_nrows == 0 || data_ncols == 0
+    if data_nrows == 0 || data_ncols == 0
+      return {
+        Array.new(char_height) { Array.new(disp_w, Float64::NAN) },
+        Array.new(char_height) { Array.new(disp_w, false) },
+      }
+    end
 
-    Array.new(char_height) do |pixel_idx|
-      row_idx = data_nrows == 1 || char_height == 1 ? 0 :
-        (pixel_idx.to_f * (data_nrows - 1) / (char_height - 1)).round.to_i32.clamp(0, data_nrows - 1)
+    data = Array.new(char_height) do |pixel_idx|
+      row_idx = data_nrows == 1 || char_height == 1 ? 0 : (pixel_idx.to_f * (data_nrows - 1) / (char_height - 1)).round.to_i32.clamp(0, data_nrows - 1)
       Array.new(disp_w) do |col_idx|
-        source_col = data_ncols == 1 || disp_w == 1 ? 0 :
-          (col_idx.to_f * (data_ncols - 1) / (disp_w - 1)).round.to_i32.clamp(0, data_ncols - 1)
+        source_col = data_ncols == 1 || disp_w == 1 ? 0 : (col_idx.to_f * (data_ncols - 1) / (disp_w - 1)).round.to_i32.clamp(0, data_ncols - 1)
         z_sub[row_idx][source_col]
       end
     end
+    {data, Array.new(char_height) { Array.new(disp_w, true) }}
   end
 
   def heatmap( # ameba:disable Metrics/CyclomaticComplexity
@@ -256,14 +269,14 @@ z : Array(Array(Float64)),
     fn = colormap_callback(colormap)
 
     # Preserve source coordinates when the visible range extends past the data.
-    data = if eff_xfact > 0.0 && eff_yfact > 0.0
-             resample_heatmap(z, x_arr, y_arr, eff_xlim, eff_ylim,
-               eff_xfact, eff_yfact, char_height, char_width)
-           else
-             resample_heatmap_unscaled(z_sub, char_height, char_width)
-           end
+    data, present = if eff_xfact > 0.0 && eff_yfact > 0.0
+                      resample_heatmap(z, x_arr, y_arr, eff_xlim, eff_ylim,
+                        eff_xfact, eff_yfact, char_height, char_width)
+                    else
+                      resample_heatmap_unscaled(z_sub, char_height, char_width)
+                    end
 
-    area = HeatmapGraphics.new(data, fn, zmin, zmax, !data.empty?, array)
+    area = HeatmapGraphics.new(data, fn, zmin, zmax, !data.empty?, array, present: present)
 
     plot = Plot.new(area,
       border: border, title: title, xlabel: xlabel, ylabel: ylabel, zlabel: zlabel,

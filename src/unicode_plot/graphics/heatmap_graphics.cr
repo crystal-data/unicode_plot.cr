@@ -63,6 +63,7 @@ module UnicodePlot
     getter zmin : Float64
     getter zmax : Float64
     getter? yflip : Bool
+    @present : Array(Array(Bool))
 
     def initialize(
       @data : Array(Array(Float64)),
@@ -71,7 +72,10 @@ module UnicodePlot
       @zmax : Float64,
       @visible : Bool = true,
       @yflip : Bool = false,
+      *,
+      present : Array(Array(Bool))? = nil,
     )
+      @present = present || Array.new(data.size) { |row| Array.new(data[row].size, true) }
       char_height = data.size # = data_nrows; each display row uses 2 data rows
       data_ncols = data.empty? ? 0 : data[0].size
       # nrows(c::HeatmapCanvas) = div(char_height + 1, 2) in Julia
@@ -110,14 +114,23 @@ module UnicodePlot
         upper_idx = upper_p > 0 ? char_height - upper_p : -1
       end
 
+      black = UnicodePlot.ansi_color(:black)
       (0...@ncols).each do |col|
         lower_row = (lower_idx >= 0 && lower_idx < char_height) ? @data[lower_idx]? : nil
         upper_row = (upper_idx >= 0 && upper_idx < char_height) ? @data[upper_idx]? : nil
         lower_val = lower_row ? lower_row[col]? : nil
         upper_val = upper_row ? upper_row[col]? : nil
 
-        fg = lower_val ? @colormap_fn.call(lower_val, @zmin, @zmax) : INVALID_COLOR
-        bg = upper_val ? @colormap_fn.call(upper_val, @zmin, @zmax) : INVALID_COLOR
+        # Julia initializes unpopulated cells to black. A source NaN is
+        # different: it has been plotted, but carries no color.
+        fg = lower_val && @present[lower_idx][col] ? @colormap_fn.call(lower_val, @zmin, @zmax) : black
+        bg = if upper_p == 0
+               INVALID_COLOR
+             elsif upper_val && @present[upper_idx][col]
+               @colormap_fn.call(upper_val, @zmin, @zmax)
+             else
+               black
+             end
 
         if use_color
           if fg != INVALID_COLOR && bg != INVALID_COLOR
@@ -132,8 +145,7 @@ module UnicodePlot
             io << ' '
           end
         else
-          io << (fg == INVALID_COLOR && bg == INVALID_COLOR ? ' ' :
-            fg == INVALID_COLOR ? '▀' : HALF_BLOCK)
+          io << (fg == INVALID_COLOR && bg == INVALID_COLOR ? ' ' : fg == INVALID_COLOR ? '▀' : HALF_BLOCK)
         end
       end
     end

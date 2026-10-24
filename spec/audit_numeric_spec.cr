@@ -56,6 +56,20 @@ describe "audited numeric and matrix behavior" do
     data[1][1..2].should eq([3.0, 4.0])
   end
 
+  it "renders cells without source data with Julia's black background" do
+    plot = UnicodePlot.heatmap([[1.0, 2.0], [3.0, 4.0]],
+      xlim: {50.0, 60.0}, height: 2, width: 2, labels: false)
+    area = plot.graphics.as(UnicodePlot::HeatmapGraphics)
+    area.data.flatten.all?(&.nan?).should be_true
+
+    colored = IO::Memory.new
+    plain = IO::Memory.new
+    area.print_row(colored, 1, true)
+    area.print_row(plain, 1, false)
+    colored.to_s.should eq("\e[38;5;0m\e[48;5;0m▄\e[0m" * 2)
+    plain.to_s.should eq("▄▄")
+  end
+
   it "colors only the populated half of a heatmap cell" do
     upper = UnicodePlot.heatmap([[Float64::NAN], [1.0]], height: 2, width: 1)
     lower = UnicodePlot.heatmap([[1.0], [Float64::NAN]], height: 2, width: 1)
