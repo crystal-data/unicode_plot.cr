@@ -240,10 +240,33 @@ module UnicodePlot
       color : UInt32,
       blend : Bool,
     ) : self
-      clipped = clip_line_to_pixels(
-        scale_x_to_pixel(x1), scale_y_to_pixel(y1),
-        scale_x_to_pixel(x2), scale_y_to_pixel(y2))
+      start_x = scale_x_to_pixel(x1)
+      start_y = scale_y_to_pixel(y1)
+      end_x = scale_x_to_pixel(x2)
+      end_y = scale_y_to_pixel(y2)
+      clipped = clip_line_to_pixels(start_x, start_y, end_x, end_y)
       return self unless clipped
+      if {start_x, end_x}.all? { |x| 0.0 <= x && x <= @pixel_width } &&
+         {start_y, end_y}.all? { |y| 0.0 <= y && y <= @pixel_height }
+        # Preserve Julia's DDA raster for segments already inside the canvas.
+        delta_x = end_x - start_x
+        delta_y = end_y - start_y
+        nsteps = Math.min(Math.max(delta_x.abs, delta_y.abs), Int32::MAX.to_f)
+        length = Math.min(nsteps.floor.to_i32, Int16::MAX.to_i32)
+        cur_x, cur_y = start_x, start_y
+        plot_pixel_if_visible(cur_x, cur_y, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+        if nsteps > 0.0
+          step_x = delta_x / nsteps
+          step_y = delta_y / nsteps
+          length.times do
+            cur_x += step_x
+            cur_y += step_y
+            plot_pixel_if_visible(cur_x, cur_y, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+          end
+        end
+        plot_pixel_if_visible(end_x, end_y, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+        return self
+      end
       sx, sy, ex, ey = clipped
       steps = Math.max((ex - sx).abs, (ey - sy).abs).ceil.to_i32
       if steps == 0
