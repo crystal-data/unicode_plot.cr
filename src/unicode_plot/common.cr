@@ -34,6 +34,7 @@ module UnicodePlot
   BORDER_CORNERS = Border.new('┌', '┐', '└', '┘', ' ', ' ', ' ', ' ')
   BORDER_BARPLOT = Border.new('┌', '┐', '└', '┘', ' ', '┤', ' ', ' ')
   BORDER_BOLD    = Border.new('┏', '┓', '┗', '┛', '━', '┃', '━', '┃')
+  BORDER_DOUBLE  = Border.new('╔', '╗', '╚', '╝', '═', '║', '═', '║')
   BORDER_NONE    = Border.new(' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ')
   BORDER_BNONE   = Border.new('⠀', '⠀', '⠀', '⠀', '⠀', '⠀', '⠀', '⠀')
   BORDER_DASHED  = Border.new('┌', '┐', '└', '┘', '╌', '┊', '╌', '┊')
@@ -45,6 +46,7 @@ module UnicodePlot
     :corners => BORDER_CORNERS,
     :barplot => BORDER_BARPLOT,
     :bold    => BORDER_BOLD,
+    :double  => BORDER_DOUBLE,
     :none    => BORDER_NONE,
     :bnone   => BORDER_BNONE,
     :dashed  => BORDER_DASHED,
@@ -87,6 +89,7 @@ module UnicodePlot
     :identity => ->(x : Float64) { x },
     :ln       => ->(x : Float64) { Math.log(x) },
     :sqrt     => ->(x : Float64) { Math.sqrt(x) },
+    :cbrt     => ->(x : Float64) { Math.cbrt(x) },
     :log2     => ->(x : Float64) { Math.log2(x) },
     :log10    => ->(x : Float64) { Math.log10(x) },
   }
@@ -95,6 +98,7 @@ module UnicodePlot
     :identity => ->(x : Float64) { x },
     :ln       => ->(x : Float64) { Math::E ** x },
     :sqrt     => ->(x : Float64) { x ** 2 },
+    :cbrt     => ->(x : Float64) { x ** 3 },
     :log2     => ->(x : Float64) { 2.0 ** x },
     :log10    => ->(x : Float64) { 10.0 ** x },
   }
@@ -103,6 +107,7 @@ module UnicodePlot
     :identity => nil,
     :ln       => "ℯ",
     :sqrt     => nil,
+    :cbrt     => nil,
     :log2     => "2",
     :log10    => "10",
   }
@@ -273,6 +278,27 @@ module UnicodePlot
 
   def no_ansi_escape(str : String) : String
     str.gsub(/\e\[[0-9;]*[a-zA-Z]/, "")
+  end
+
+  # Terminal column width for ordinary text. Emoji sequence width remains terminal-dependent.
+  def display_width(str : String) : Int32
+    no_ansi_escape(str).each_char.sum do |char|
+      code = char.ord
+      if code == 0 || code < 32 || (0x7f..0x9f).includes?(code) ||
+         (0x0300..0x036f).includes?(code) || (0x1ab0..0x1aff).includes?(code) ||
+         (0x1dc0..0x1dff).includes?(code) || (0x20d0..0x20ff).includes?(code) ||
+         (0xfe20..0xfe2f).includes?(code)
+        0
+      elsif (0x1100..0x115f).includes?(code) || (0x2329..0x232a).includes?(code) ||
+            (0x2e80..0xa4cf).includes?(code) || (0xac00..0xd7a3).includes?(code) ||
+            (0xf900..0xfaff).includes?(code) || (0xfe10..0xfe19).includes?(code) ||
+            (0xfe30..0xfe6f).includes?(code) || (0xff01..0xff60).includes?(code) ||
+            (0xffe0..0xffe6).includes?(code)
+        2
+      else
+        1
+      end
+    end
   end
 
   def roundable(x : Float64) : Bool

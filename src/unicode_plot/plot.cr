@@ -196,7 +196,7 @@ module UnicodePlot
     end
 
     def annotate!(x : Float64, y : Float64, text : String, color : UInt32, blend : Bool, **kw) : self
-      canvas.annotate!(x, y, text, color, blend)
+      canvas.annotate!(x, y, text, color, blend, **kw)
       self
     end
 

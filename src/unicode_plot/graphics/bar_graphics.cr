@@ -1,6 +1,7 @@
 module UnicodePlot
   class BarplotGraphics < GraphicsArea
     getter bars : Array(Float64)
+    getter spacer_rows : Array(Bool)
     getter colors : Array(UInt32)
     getter ncols : Int32 # char width
     getter? visible : Bool
@@ -21,10 +22,13 @@ module UnicodePlot
       color : Symbol | Int32 | {Int32, Int32, Int32} | Array(Symbol) | Array(Int32) | Array(UInt32) | UInt32 = :green,
       maximum : Float64? = nil,
       formatter : Proc(Float64, String)? = nil,
+      spacer_rows : Array(Bool)? = nil,
       visible : Bool = true,
       xscale : Symbol | Proc(Float64, Float64) = :identity,
     )
       @bars = bars.dup
+      @spacer_rows = spacer_rows || Array.new(bars.size, false)
+      raise ArgumentError.new("spacer_rows must match bars") unless @spacer_rows.size == bars.size
       @visible = visible
       @symbols = symbols
       @formatter = formatter || ->(x : Float64) { UnicodePlot.nice_repr(x) }
@@ -32,10 +36,11 @@ module UnicodePlot
       @maximum = maximum || -Float64::INFINITY
 
       # Compute minimum needed width
-      max_val_str_len = bars.empty? ? 1 : bars.max_of { |bar| @formatter.call(bar).size }
+      max_val_str_len = bars.each_with_index.max_of? { |bar, i| @spacer_rows[i] ? 0 : @formatter.call(bar).size } || 1
       @ncols = Math.max(10, Math.max(char_width, max_val_str_len + 7))
 
       @colors = resolve_colors(color, bars.size)
+      raise ArgumentError.new("colors must match bars") unless @colors.size == bars.size
     end
 
     private def resolve_colors(color : Array(Symbol), size : Int32) : Array(UInt32)
@@ -84,10 +89,19 @@ module UnicodePlot
           bg.max_len = 0
         }
       end
-      scaled = @bars.map { |bar| @xscale.call(bar) }
-      max_val, max_idx = scaled.each_with_index.max_by { |v, _| v }
-      @max_val = Math.max(max_val || -Float64::INFINITY, @maximum)
-      @max_len = @formatter.call(@bars[max_idx || 0]).size
+      real_bars = @bars.each_with_index.compact_map { |bar, i| bar unless @spacer_rows[i] }.to_a
+      if real_bars.empty?
+        @max_val = Math.max(0.0, @maximum)
+        @max_len = 0
+        return ->(grph : GraphicsArea) {
+          bg = grph.as(BarplotGraphics)
+          bg.max_val = -Float64::INFINITY
+          bg.max_len = 0
+        }
+      end
+      scaled = real_bars.map { |bar| @xscale.call(bar) }
+      @max_val = Math.max(scaled.max, @maximum)
+      @max_len = real_bars.max_of { |bar| @formatter.call(bar).size }
       ->(grph : GraphicsArea) {
         bg = grph.as(BarplotGraphics)
         bg.max_val = -Float64::INFINITY
@@ -98,6 +112,10 @@ module UnicodePlot
     def print_row(io : IO, row : Int32, use_color : Bool) : Nil
       raise ArgumentError.new("`row` out of bounds: #{row}") unless 1 <= row <= nrows
       idx = row - 1
+      if @spacer_rows[idx]
+        io << " " * @ncols
+        return
+      end
       bar = @bars[idx]
       val = @xscale.call(bar)
       nsyms = @symbols.size
@@ -133,10 +151,15 @@ module UnicodePlot
       io << " " * pad_len
     end
 
-    def add_row!(bars : Array(Float64), color : (Symbol | Int32 | UInt32 | {Int32, Int32, Int32})? = nil) : self
+    def add_row!(bars : Array(Float64), color : (Symbol | Int32 | UInt32 | {Int32, Int32, Int32})? = nil,
+                 spacer_rows : Array(Bool)? = nil) : self
+      new_spacers = spacer_rows || Array.new(bars.size, false)
+      raise ArgumentError.new("spacer_rows must match bars") unless new_spacers.size == bars.size
       @bars.concat(bars)
+      @spacer_rows.concat(new_spacers)
       new_colors = append_colors(bars.size, color)
       @colors.concat(new_colors)
+      @ncols = Math.max(@ncols, @bars.each_with_index.max_of { |bar, i| @spacer_rows[i] ? 0 : @formatter.call(bar).size } + 7)
       self
     end
 

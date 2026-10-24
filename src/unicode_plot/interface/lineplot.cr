@@ -149,12 +149,12 @@ module UnicodePlot
     lineplot(x, y, **kwargs)
   end
 
-  def lineplot(y : Array(Quantity)) : Plot
+  def lineplot(y : Array(Quantity), **kwargs) : Plot
     x = (1..y.size).map(&.to_f64)
     y_nu = number_unit(y)
     y_values = y_nu[0]
     y_unit = y_nu[1]
-    lineplot(x, y_values, yunit: y_unit)
+    lineplot(x, y_values, **{yunit: y_unit}.merge(kwargs))
   end
 
   def lineplot(y : Array(T), **kwargs) : Plot forall T
@@ -247,7 +247,7 @@ module UnicodePlot
     )
   end
 
-  def lineplot(x : Array(T), y : Array(Quantity)) : Plot forall T
+  def lineplot(x : Array(T), y : Array(Quantity), **kwargs) : Plot forall T
     y_nu = number_unit(y)
     y_values = y_nu[0]
     y_unit = y_nu[1]
@@ -255,13 +255,13 @@ module UnicodePlot
       x_nu = number_unit(x)
       x_values = x_nu[0]
       x_unit = x_nu[1]
-      lineplot(x_values, y_values, xunit: x_unit, yunit: y_unit)
+      lineplot(x_values, y_values, **{xunit: x_unit, yunit: y_unit}.merge(kwargs))
     {% else %}
-      lineplot(to_plot_f64(x), y_values, yunit: y_unit)
+      lineplot(to_plot_f64(x), y_values, **{yunit: y_unit}.merge(kwargs))
     {% end %}
   end
 
-  def lineplot(x : Array(Quantity), y : Array(T)) : Plot forall T
+  def lineplot(x : Array(Quantity), y : Array(T), **kwargs) : Plot forall T
     x_nu = number_unit(x)
     x_values = x_nu[0]
     x_unit = x_nu[1]
@@ -269,9 +269,9 @@ module UnicodePlot
       y_nu = number_unit(y)
       y_values = y_nu[0]
       y_unit = y_nu[1]
-      lineplot(x_values, y_values, xunit: x_unit, yunit: y_unit)
+      lineplot(x_values, y_values, **{xunit: x_unit, yunit: y_unit}.merge(kwargs))
     {% else %}
-      lineplot(x_values, to_plot_f64(y), xunit: x_unit)
+      lineplot(x_values, to_plot_f64(y), **{xunit: x_unit}.merge(kwargs))
     {% end %}
   end
 

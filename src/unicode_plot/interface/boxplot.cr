@@ -127,6 +127,10 @@ module UnicodePlot
     plot
   end
 
+  def boxplot(data : Array(Array(T)), **kwargs) : Plot forall T
+    boxplot(data.map { |series| to_plot_f64(series) }, **kwargs)
+  end
+
   def boxplot(
     data : Array(Float64),
     *,

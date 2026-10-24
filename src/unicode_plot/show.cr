@@ -16,7 +16,7 @@ module UnicodePlot
     io : IO, lab : String, cbar_max_len : Int32, padding : Int32, bc : UInt32,
     trail : String, use_color : Bool,
   ) : Nil
-    len = lab.size
+    len = display_width(lab)
     lpad = if len >= WIDTH_CB
              # Wide label: shift left so it centres over the colorbar
              Math.max(0, padding - (len - WIDTH_CB) // 2)
@@ -91,7 +91,7 @@ module UnicodePlot
     end
 
     lpad = p.zlabel.empty? ? 0 : p.padding
-    rpad = Math.max(0, cbar_max_len - lpad - WIDTH_CB - lab.size)
+    rpad = Math.max(0, cbar_max_len - lpad - WIDTH_CB - display_width(lab))
     io << " " * lpad
     io << lab
     io << " " * rpad
@@ -112,10 +112,15 @@ module UnicodePlot
     nc = g.ncols
 
     p_width = nc + 2
+    compact_row = (nr / 2.0).round.to_i32
+    old_bottom = p.decorations[:b]?
+    old_bottom_color = p.colors_deco[:b]?
+    old_left = p.labels_left[compact_row]?
+    old_left_color = p.colors_left[compact_row]?
 
     if p.compact_labels?
       p.label!(:b, xlab) unless xlab.empty?
-      p.label!(:l, (nr / 2.0).round.to_i32, ylab) unless ylab.empty?
+      p.label!(:l, compact_row, ylab) unless ylab.empty?
     end
 
     border_sym = (p.border == :none && g.is_a?(BrailleCanvas)) ? :bnone : p.border
@@ -123,19 +128,19 @@ module UnicodePlot
     bc = ansi_color(border_color)
 
     max_len_l = if p.labels? && !p.labels_left.empty?
-                  p.labels_left.values.max_of { |label| no_ansi_escape(label).size }
+                  p.labels_left.values.max_of { |label| display_width(label) }
                 else
                   0
                 end
     max_len_r = if p.labels? && !p.labels_right.empty?
-                  p.labels_right.values.max_of { |label| no_ansi_escape(label).size }
+                  p.labels_right.values.max_of { |label| display_width(label) }
                 else
                   0
                 end
-    max_len_a = p.labels? ? [xlab, ylab, zlab].max_of(&.size) : 0
+    max_len_a = p.labels? ? [xlab, ylab, zlab].max_of { |label| display_width(label) } : 0
 
     if !p.compact_labels? && p.labels? && !ylab.empty?
-      max_len_l += ylab.size + 1
+      max_len_l += display_width(ylab) + 1
     end
 
     has_labels = (max_len_l > 0 || max_len_r > 0 || max_len_a > 0 || !p.decorations.empty?) && p.labels?
@@ -154,19 +159,19 @@ module UnicodePlot
       max_z = p.colormap.lim[1]
       min_z_str = nice_repr(roundable(min_z) ? min_z : float_round_log10(min_z), p.unicode_exponent?, p.thousands_separator)
       max_z_str = nice_repr(roundable(max_z) ? max_z : float_round_log10(max_z), p.unicode_exponent?, p.thousands_separator)
-      zlab_len = zlab.size
+      zlab_len = display_width(zlab)
       cbar_max_len = [
-        min_z_str.size,
-        max_z_str.size,
+        display_width(min_z_str),
+        display_width(max_z_str),
         WIDTH_CB + (zlab_len > 0 ? p.padding + zlab_len : 0),
       ].max
     end
 
     # Print title
     unless p.title.empty?
-      offset = ((p_width / 2.0) - (p.title.size / 2.0)).round(mode: :ties_away).to_i32
+      offset = ((p_width / 2.0) - (display_width(p.title) / 2.0)).round(mode: :ties_away).to_i32
       pre = blank_in.to_s * Math.max(0, offset)
-      post = blank_in.to_s * Math.max(0, p_width - offset - p.title.size)
+      post = blank_in.to_s * Math.max(0, p_width - offset - display_width(p.title))
       io << border_left_pad
       io << pre
       if use_color
@@ -213,12 +218,12 @@ module UnicodePlot
         left_col = p.colors_left[row]? || bc
         right_str = p.labels_right[row]? || ""
         right_col = p.colors_right[row]? || bc
-        left_len = no_ansi_escape(left_str).size
-        right_len = no_ansi_escape(right_str).size
+        left_len = display_width(left_str)
+        right_len = display_width(right_str)
 
         if !p.compact_labels? && row == y_lab_row && !ylab.empty?
           print_color(io, INVALID_COLOR, ylab, use_color)
-          io << " " * (max_len_l - ylab.size - left_len)
+          io << " " * (max_len_l - display_width(ylab) - left_len)
         else
           io << " " * (max_len_l - left_len)
         end
@@ -236,7 +241,7 @@ module UnicodePlot
       if has_labels
         right_str = p.labels_right[row]? || ""
         right_col = p.colors_right[row]? || bc
-        right_len = no_ansi_escape(right_str).size
+        right_len = display_width(right_str)
         print_color(io, right_col, right_str, use_color)
         io << " " * (max_len_r - right_len)
       end
@@ -269,9 +274,9 @@ module UnicodePlot
       print_labels(io, p, :b, nc - 2, (had_border ? "\n" : "") + border_left_pad + blank_in.to_s, blank_in.to_s + " " * max_len_r, blank_in, use_color)
       if !p.compact_labels? && !xlab.empty?
         io << '\n'
-        offset = ((p_width / 2.0) - (xlab.size / 2.0)).round(mode: :ties_away).to_i32
+        offset = ((p_width / 2.0) - (display_width(xlab) / 2.0)).round(mode: :ties_away).to_i32
         pre = blank_in.to_s * Math.max(0, offset)
-        post = blank_in.to_s * Math.max(0, p_width - pre.size - xlab.size)
+        post = blank_in.to_s * Math.max(0, p_width - pre.size - display_width(xlab))
         io << border_left_pad
         io << pre
         io << xlab
@@ -280,6 +285,30 @@ module UnicodePlot
     end
 
     io << '\n'
+  ensure
+    if p.compact_labels?
+      row = compact_row || 1
+      if old_bottom
+        p.decorations[:b] = old_bottom
+      else
+        p.decorations.delete(:b)
+      end
+      if old_bottom_color
+        p.colors_deco[:b] = old_bottom_color
+      else
+        p.colors_deco.delete(:b)
+      end
+      if old_left
+        p.labels_left[row] = old_left
+      else
+        p.labels_left.delete(row)
+      end
+      if old_left_color
+        p.colors_left[row] = old_left_color
+      else
+        p.colors_left.delete(row)
+      end
+    end
   end
 
   # ameba:disable Metrics/CyclomaticComplexity
@@ -304,9 +333,9 @@ module UnicodePlot
     mid_col = p.colors_deco[mloc]? || bc
     right_col = p.colors_deco[rloc]? || bc
 
-    left_len = left_str.size
-    mid_len = mid_str.size
-    right_len = right_str.size
+    left_len = display_width(left_str)
+    mid_len = display_width(mid_str)
+    right_len = display_width(right_str)
 
     io << left_pad
     print_color(io, left_col, left_str, use_color)

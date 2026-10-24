@@ -54,10 +54,10 @@ module UnicodePlot
     if labels
       bc = ansi_color(border_color)
       fmt = ->(v : Float64) { nice_repr(v, unicode_exponent, thousands_separator) }
-      plot.label!(:bl, fmt.call(mx), bc)
-      plot.label!(:br, fmt.call(bx), bc)
-      plot.label!(:l, h, fmt.call(my), bc)
-      plot.label!(:l, 1, fmt.call(by), bc)
+      plot.label!(:bl, fmt.call(xflip ? bx : mx), bc)
+      plot.label!(:br, fmt.call(xflip ? mx : bx), bc)
+      plot.label!(:l, h, fmt.call(yflip ? by : my), bc)
+      plot.label!(:l, 1, fmt.call(yflip ? my : by), bc)
     end
 
     scatterplot!(plot, x, y, name: name, color: color)

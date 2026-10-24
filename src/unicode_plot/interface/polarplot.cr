@@ -6,7 +6,7 @@ module UnicodePlot
   private def polar_label_radius(value : Float64) : String
     rounded = value.round
     if value.finite? && value == rounded
-      rounded.to_i.to_s
+      nice_repr(value)
     else
       "%.1f" % value
     end

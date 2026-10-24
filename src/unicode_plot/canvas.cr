@@ -19,6 +19,7 @@ module UnicodePlot
 
     @grid : Array(UInt32)
     @colors : Array(UInt32)
+    @annotations : Array(String?)
 
     abstract def blank : Char
     abstract def y_pixel_per_char : Int32
@@ -44,6 +45,7 @@ module UnicodePlot
     )
       @grid = Array(UInt32).new(@nrows * @ncols, fill_value)
       @colors = Array(UInt32).new(@nrows * @ncols, INVALID_COLOR)
+      @annotations = Array(String?).new(@nrows * @ncols, nil)
     end
 
     # Grid and color accessors (1-based row/col)
@@ -310,7 +312,7 @@ module UnicodePlot
       point = pixel_to_char_point(px, py)
       return self unless point
       cx, cy = point
-      n = text.size
+      n = UnicodePlot.display_width(text)
       cx = case halign
            when :center, :hcenter then cx - n // 2
            when :left             then cx
@@ -322,24 +324,41 @@ module UnicodePlot
            when :bottom then cy - 1
            else              cy
            end
-      text.each_char.with_index do |chr, idx|
-        char_point!(cx + idx, cy, chr, color, blend)
+      col = cx
+      last_col = nil.as(Int32?)
+      text.each_char do |chr|
+        char_width = UnicodePlot.display_width(chr.to_s)
+        if char_width == 0
+          if previous = last_col
+            index = (cy - 1) * @ncols + previous - 1
+            @annotations[index] = (@annotations[index] || "") + chr.to_s
+          end
+        else
+          char_point!(col, cy, chr, color, blend)
+          last_col = col if 1 <= col <= @ncols && 1 <= cy <= @nrows
+          col += char_width
+        end
       end
       self
     end
 
     def char_point!(col : Int32, row : Int32, char : Char, color : UInt32, blend : Bool) : Nil
       return unless 1 <= row <= @nrows && 1 <= col <= @ncols
-      grid_set!(row, col, char.ord.to_u32)
+      width = UnicodePlot.display_width(char.to_s)
+      return if width == 2 && col == @ncols
+      @annotations[(row - 1) * @ncols + col - 1] = char.to_s
+      @annotations[(row - 1) * @ncols + col] = "" if width == 2
       set_color!(col, row, color, blend)
     end
 
     def print_row(io : IO, row : Int32, use_color : Bool) : Nil
       raise ArgumentError.new("`row` out of bounds: #{row}") unless 1 <= row <= @nrows
       (1..@ncols).each do |col|
-        c = grid_char_at(row, col)
+        overlay = @annotations[(row - 1) * @ncols + col - 1]
+        next if overlay == ""
+        c = overlay || grid_char_at(row, col).to_s
         color = color_at(row, col)
-        UnicodePlot.print_color(io, color, c.to_s, use_color)
+        UnicodePlot.print_color(io, color, c, use_color)
       end
     end
 

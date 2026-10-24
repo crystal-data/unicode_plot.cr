@@ -1,4 +1,22 @@
 module UnicodePlot
+  private def normalize_bar_rows(text : Array(String), heights : Array(Float64)) : {Array(String), Array(Float64), Array(Bool), Array(Int32)}
+    final_text = [] of String
+    final_heights = [] of Float64
+    spacers = [] of Bool
+    source_rows = [] of Int32
+    text.each_with_index do |label, i|
+      lines = label.split('\n')
+      lines.each_with_index do |line, j|
+        spacer = j < lines.size - 1
+        final_text << line
+        final_heights << (spacer ? 0.0 : heights[i])
+        spacers << spacer
+        source_rows << i
+      end
+    end
+    {final_text, final_heights, spacers, source_rows}
+  end
+
   def barplot(
     text : Array(String),
     heights : Array(Float64),
@@ -24,32 +42,35 @@ module UnicodePlot
     raise ArgumentError.new("text and heights must have the same length") unless text.size == heights.size
     raise ArgumentError.new("all values must be >= 0") unless heights.all? { |val| val >= 0 }
 
-    # Handle multi-line labels with negative placeholder heights
-    final_text = [] of String
-    final_heights = [] of Float64
-    text.each_with_index do |label, i|
-      if label.includes?('\n')
-        lines = label.split('\n')
-        lines.each_with_index do |line, j|
-          final_text << line
-          final_heights << (j == lines.size - 1 ? heights[i] : -1.0)
-        end
-      else
-        final_text << label
-        final_heights << heights[i]
-      end
-    end
+    final_text, final_heights, spacers, source_rows = normalize_bar_rows(text, heights)
+    expanded_color = case color
+                     when Array(Symbol)
+                       raise ArgumentError.new("colors must match bars") unless color.size == heights.size
+                       source_rows.map { |i| color.as(Array(Symbol))[i] }
+                     when Array(Int32)
+                       raise ArgumentError.new("colors must match bars") unless color.size == heights.size
+                       source_rows.map { |i| color.as(Array(Int32))[i] }
+                     when Array(UInt32)
+                       raise ArgumentError.new("colors must match bars") unless color.size == heights.size
+                       source_rows.map { |i| color.as(Array(UInt32))[i] }
+                     else
+                       color
+                     end
 
     char_width = width || default_width
     fmt = if integer_labels
-            ->(x : Float64) { nice_repr(x.round.to_i64, unicode_exponent, thousands_separator) }
+            ->(x : Float64) {
+              x.finite? && x >= Int64::MIN.to_f && x < Int64::MAX.to_f ?
+                nice_repr(x.round.to_i64, unicode_exponent, thousands_separator) :
+                nice_repr(x, unicode_exponent, thousands_separator)
+            }
           else
             ->(x : Float64) { bar_float_label(x, unicode_exponent, thousands_separator) }
           end
     area = BarplotGraphics.new(
       final_heights, char_width,
-      symbols: symbols, color: color, maximum: maximum,
-      formatter: fmt, xscale: xscale
+      symbols: symbols, color: expanded_color, maximum: maximum,
+      formatter: fmt, xscale: xscale, spacer_rows: spacers
     )
 
     xlab = xlabel.empty? ? transform_name(xscale, xlabel) : xlabel
@@ -100,8 +121,9 @@ module UnicodePlot
     raise ArgumentError.new("cannot append empty array to barplot") if text.empty?
     area = plot.graphics.as(BarplotGraphics)
     cur_idx = area.nrows
-    area.add_row!(heights, color)
-    text.each_with_index do |label, i|
+    final_text, final_heights, spacers, _ = normalize_bar_rows(text, heights)
+    area.add_row!(final_heights, color, spacers)
+    final_text.each_with_index do |label, i|
       plot.label!(:l, cur_idx + i + 1, label)
     end
     plot.label!(:r, name, suitable_color(area, color)) unless name.empty?
@@ -129,7 +151,7 @@ module UnicodePlot
   end
 
   private def bar_float_label(value : Float64, unicode_exponent : Bool, thousands_separator : Char) : String
-    if value.finite? && value == value.round
+    if value.finite? && value == value.round && value >= Int64::MIN.to_f && value < Int64::MAX.to_f
       "#{nice_repr(value.round.to_i64, unicode_exponent, thousands_separator)}.0"
     else
       nice_repr(value, unicode_exponent, thousands_separator)
