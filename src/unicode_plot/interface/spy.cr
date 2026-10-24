@@ -117,6 +117,10 @@ module UnicodePlot
 
     nrows = matrix.nrows
     ncols = matrix.ncols
+    # A nonempty matrix with zero columns has no drawable width or aspect ratio.
+    # Keep the supported 0x0 case, but report this shape before sizing it.
+    raise ArgumentError.new("spy cannot draw rows with zero columns") if nrows > 0 && ncols == 0
+
     row_coords = matrix_row_coords(matrix)
     col_coords = matrix_col_coords(matrix)
 

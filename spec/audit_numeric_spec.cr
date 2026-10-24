@@ -93,6 +93,15 @@ describe "audited numeric and matrix behavior" do
     lower_io.to_s.should_not contain("[48;")
   end
 
+  it "rejects spy matrices with rows but zero columns" do
+    [1, 2].each do |nrows|
+      rows = Array(Array(Float64)).new(nrows) { [] of Float64 }
+      expect_raises(ArgumentError, /zero columns/) do
+        UnicodePlot.spy(rows, height: 2, width: 2)
+      end
+    end
+  end
+
   it "stops contours at missing cells without erasing small coordinates" do
     missing = UnicodePlot::MatrixView.new([[0.0, 0.0, Float64::NAN], [1.0, 1.0, 2.0]])
     level = UnicodePlot::Contour.contour([0.0, 1.0, 2.0], [0.0, 1.0], missing, 0.5)
