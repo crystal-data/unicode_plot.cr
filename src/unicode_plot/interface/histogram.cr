@@ -212,7 +212,7 @@ module UnicodePlot
     # bypassing plotting_range_narrow rounding that distorts histogram edges and scale.
     plot = build_plot(
       [edge_min, edge_max], [0.0, max_val],
-      canvas_type: :braille,
+      canvas_type: :block,
       title: title, xlabel: xlabel,
       border: :corners,
       width: actual_width,

@@ -22,6 +22,7 @@ describe "audited numeric and matrix behavior" do
     data = [0.0, 0.0, 1.0, 2.0]
     left = UnicodePlot.histogram(data, nbins: 2, vertical: true, closed: :left)
     right = UnicodePlot.histogram(data, nbins: 2, vertical: true, closed: :right)
+    left.canvas.should be_a(UnicodePlot::BlockCanvas)
     left.decorations[:bl].should_not eq(right.decorations[:bl])
 
     plot = UnicodePlot.histogram(data, vertical: true, labels: false, margin: 0, padding: 0)
