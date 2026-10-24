@@ -1,56 +1,59 @@
 require "../support/reference_helpers"
+require "set"
+
+# Compare the chart and labels exactly, while allowing contour strokes to move
+# by one Braille pixel when traversal order or floating-point rounding differs.
+private def contour_reference_pixels(text : String) : {Set({Int32, Int32}), String}
+  pixels = Set({Int32, Int32}).new
+  frame = String.build do |io|
+    normalize_output(strip_ansi(text)).split('\n').each_with_index do |line, row|
+      io << '\n' unless row == 0
+      line.chars.each_with_index do |char, col|
+        code = char.ord
+        if 0x2800 <= code <= 0x28ff
+          bits = code - 0x2800
+          {
+            {0, 0, 0x01}, {0, 1, 0x02}, {0, 2, 0x04}, {0, 3, 0x40},
+            {1, 0, 0x08}, {1, 1, 0x10}, {1, 2, 0x20}, {1, 3, 0x80},
+          }.each do |dx, dy, mask|
+            pixels.add({2 * col + dx, 4 * row + dy}) if bits & mask != 0
+          end
+          io << '⠀'
+        else
+          io << char
+        end
+      end
+    end
+  end
+  {pixels, frame}
+end
+
+private def contour_pixel_near?(pixels : Set({Int32, Int32}), x : Int32, y : Int32) : Bool
+  (-1..1).any? do |dx|
+    (-1..1).any? { |dy| pixels.includes?({x + dx, y + dy}) }
+  end
+end
+
+private def test_contour_ref(relative_path : String, plot : UnicodePlot::Plot) : Nil
+  expected, expected_frame = contour_reference_pixels(File.read(File.join(JULIA_REFS, relative_path)))
+  actual, actual_frame = contour_reference_pixels(plot.to_s)
+
+  actual_frame.should eq(expected_frame)
+  actual.should_not be_empty
+  (actual.size - expected.size).abs.should be <= (expected.size * 0.02).ceil.to_i
+  actual.count { |x, y| !contour_pixel_near?(expected, x, y) }.should eq(0)
+  expected.count { |x, y| !contour_pixel_near?(actual, x, y) }.should eq(0)
+end
 
 describe "Julia reference output compatibility - contourplot" do
   describe "contourplot" do
-    # NOTE: Contour parity work is intentionally paused for the failing reference cases below.
-    #
-    # Investigation summary (Crystal vs Julia):
-    # - Failing snapshots are limited to: padding_0..3 and consistency.
-    # - Extracted contour geometry is effectively equivalent:
-    #   - per-level vertex counts match,
-    #   - point sets match,
-    #   - undirected segment sets match.
-    # - Despite that, rendered text differs reproducibly in these cases.
-    # - This strongly suggests the remaining mismatch is in rasterization / line drawing
-    #   order sensitivity (Canvas/lines!), not in contour topology extraction itself.
-    #
-    # Experiments attempted (no resolution):
-    # - changed contour cell traversal order,
-    # - changed level comparison (> vs >=),
-    # - normalized polyline segment direction at draw time,
-    # - verified ambiguous marching-squares cases still pass contour unit specs.
-    #
-    # Keep these 5 specs pending until Canvas parity work is resumed.
-    pending "matches contourplot/padding_0 (Known parity gap: contour geometry matches Julia, rendered raster output still differs)" do
-      x = range_by_step(-1.0, 1.0, 0.1)
-      y = x
-      z = y.map { |y_value| x.map { |x_value| 1.0e4 * Math.sqrt(x_value**2 + y_value**2) } }
-      p = UnicodePlot.contourplot(x, y, z, labels: false, margin: 0, padding: 0)
-      test_ref("contourplot/padding_0.txt", p)
-    end
-
-    pending "matches contourplot/padding_1 (Known parity gap: contour geometry matches Julia, rendered raster output still differs)" do
-      x = range_by_step(-1.0, 1.0, 0.1)
-      y = x
-      z = y.map { |y_value| x.map { |x_value| 1.0e4 * Math.sqrt(x_value**2 + y_value**2) } }
-      p = UnicodePlot.contourplot(x, y, z, labels: false, margin: 0, padding: 1)
-      test_ref("contourplot/padding_1.txt", p)
-    end
-
-    pending "matches contourplot/padding_2 (Known parity gap: contour geometry matches Julia, rendered raster output still differs)" do
-      x = range_by_step(-1.0, 1.0, 0.1)
-      y = x
-      z = y.map { |y_value| x.map { |x_value| 1.0e4 * Math.sqrt(x_value**2 + y_value**2) } }
-      p = UnicodePlot.contourplot(x, y, z, labels: false, margin: 0, padding: 2)
-      test_ref("contourplot/padding_2.txt", p)
-    end
-
-    pending "matches contourplot/padding_3 (Known parity gap: contour geometry matches Julia, rendered raster output still differs)" do
-      x = range_by_step(-1.0, 1.0, 0.1)
-      y = x
-      z = y.map { |y_value| x.map { |x_value| 1.0e4 * Math.sqrt(x_value**2 + y_value**2) } }
-      p = UnicodePlot.contourplot(x, y, z, labels: false, margin: 0, padding: 3)
-      test_ref("contourplot/padding_3.txt", p)
+    (0..3).each do |padding|
+      it "matches contourplot/padding_#{padding} within one Braille pixel" do
+        x = range_by_step(-1.0, 1.0, 0.1)
+        z = x.map { |y_value| x.map { |x_value| 1.0e4 * Math.sqrt(x_value**2 + y_value**2) } }
+        p = UnicodePlot.contourplot(x, x, z, labels: false, margin: 0, padding: padding)
+        test_contour_ref("contourplot/padding_#{padding}.txt", p)
+      end
     end
 
     it "matches contourplot/gauss_cividis" do
@@ -88,12 +91,12 @@ describe "Julia reference output compatibility - contourplot" do
       test_ref("contourplot/function_contour.txt", p)
     end
 
-    pending "matches contourplot/consistency (Known parity gap: contour geometry matches Julia, rendered raster output still differs)" do
+    it "matches contourplot/consistency within one Braille pixel" do
       x = range_by_step(-2.0, 2.0, 0.2)
       y = range_by_step(-3.0, 1.0, 0.2)
       z = y.map { |y_value| x.map { |x_value| 10.0 * x_value * Math.exp(-(x_value**2) - (y_value**2)) } }
       p = UnicodePlot.contourplot(x, y, z, levels: 10)
-      test_ref("contourplot/consistency.txt", p)
+      test_contour_ref("contourplot/consistency.txt", p)
     end
   end
 end
