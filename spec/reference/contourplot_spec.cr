@@ -1,8 +1,17 @@
 require "../support/reference_helpers"
 require "set"
 
-# Compare the chart and labels exactly, while allowing contour strokes to move
-# by one Braille pixel when traversal order or floating-point rounding differs.
+# The five formerly pending snapshots cover two contour fields: padding_0..3
+# share one field, while consistency uses another. Crystal and Julia extract
+# the same sets of contour vertices and undirected segments to 12 decimals.
+# Replaying Julia's directed vertex sequence in Crystal and omitting Crystal's
+# extra final line pixel reproduces all five reference images exactly.
+# Traversal order and coordinate differences below 6e-15 otherwise move some
+# rasterized dots by one Braille pixel. Matching Julia's exact traversal and
+# rounding would add implementation complexity without improving the contour.
+# Compare the frame and labels exactly, and allow a one-pixel stroke shift.
+# The 2% pixel-count bound catches changed stroke density; the observed largest
+# count difference is 6 dots out of 348 (about 1.7%).
 private def contour_reference_pixels(text : String) : {Set({Int32, Int32}), String}
   pixels = Set({Int32, Int32}).new
   frame = String.build do |io|

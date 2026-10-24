@@ -2,9 +2,12 @@ require "../support/reference_helpers"
 
 describe "Julia reference output compatibility - densityplot" do
   describe "densityplot" do
+    # The only mismatches in these two snapshots are at the right edge.
     # Crystal rejects points beyond the axis limit; Julia's pixel conversion
-    # places these boundary points in the last cell. Keep the snapshots visible
-    # until the intended boundary behavior is decided.
+    # floors them into the last cell. A temporary Julia-style conversion made
+    # both snapshots match exactly, but changes which out-of-range points are
+    # accepted. Keep the exact snapshots pending until that boundary policy is
+    # decided; the other densityplot snapshots remain active.
     pending "matches densityplot/densityplot (boundary pixel parity)" do
       x = DENSITYPLOT_X
       y = DENSITYPLOT_Y

@@ -24,7 +24,10 @@ describe "Julia reference output compatibility - polarplot" do
       test_ref("polarplot/callable.txt", p)
     end
 
-    # This line-based plot has the same final-pixel difference as lineplot.
+    # Even with lines: false for the data, polarplot draws its grid using
+    # lineplot!. Omitting Crystal's extra final line pixel in a temporary copy
+    # made this snapshot match Julia exactly. Resolve it with the lineplot
+    # endpoint policy rather than special-casing this polarplot test.
     pending "matches polarplot/kwargs (line endpoint parity)" do
       scale = POLARPLOT_FIXTURE_JSON["kwargs"]["size_scale"].as_f
       h = (UnicodePlot.default_height * scale).round.to_i

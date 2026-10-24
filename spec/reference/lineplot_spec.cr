@@ -90,9 +90,12 @@ describe "Julia reference output compatibility - lineplot" do
       test_ref("lineplot/canvassize.txt", p)
     end
 
-    # These snapshots differ because Crystal draws the final line pixel and
-    # Julia's DDA stops before it. Retain the examples pending while endpoint
-    # behavior is decided for all line-based plots.
+    # These six snapshots differ because Crystal explicitly draws each final
+    # line pixel while Julia's DDA may stop before it. Removing that extra
+    # pixel in a temporary source copy made all six snapshots match exactly.
+    # The endpoint rule is shared by line-based plots and was added so visible
+    # segments reach their endpoints. Keep these exact snapshots pending until
+    # that behavior is chosen deliberately; the other lineplot refs stay active.
     pending "matches lineplot/sin (line endpoint parity)" do
       p = UnicodePlot.lineplot(->(v : Float64) { Math.sin(v) }, name: "sin(x)", ylabel: "f(x)", xlabel: "x")
       test_ref("lineplot/sin.txt", p)
