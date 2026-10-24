@@ -411,9 +411,8 @@ module UnicodePlot
   end
 
   private def expand_equal_limits(value : Float64) : {Float64, Float64}
-    delta = Math.max(value.abs * 0.1, 1.0)
-    lower = value - delta
-    upper = value + delta
+    lower = value - 1.0
+    upper = value + 1.0
     lower = value.prev_float unless lower.finite? && lower < value
     upper = value.next_float unless upper.finite? && upper > value
     lower = value if !lower.finite? && upper.finite?

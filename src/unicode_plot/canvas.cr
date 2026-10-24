@@ -210,8 +210,9 @@ module UnicodePlot
       self
     end
 
-    # Liang-Barsky clipping in pixel coordinates, before rasterization.
-    private def clip_line_to_pixels(x1 : Float64, y1 : Float64, x2 : Float64, y2 : Float64) : {Float64, Float64, Float64, Float64}?
+    # Liang-Barsky clipping in pixel coordinates. Return the visible portion
+    # as parameters of the original segment so rasterization keeps its phase.
+    private def clip_line_to_pixels(x1 : Float64, y1 : Float64, x2 : Float64, y2 : Float64) : {Float64, Float64}?
       return unless x1.finite? && y1.finite? && x2.finite? && y2.finite?
       dx = x2 - x1
       dy = y2 - y1
@@ -231,7 +232,7 @@ module UnicodePlot
           return if first > last
         end
       end
-      {x1 + first * dx, y1 + first * dy, x1 + last * dx, y1 + last * dy}
+      {first, last}
     end
 
     def lines!(
@@ -267,17 +268,34 @@ module UnicodePlot
         plot_pixel_if_visible(end_x, end_y, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
         return self
       end
-      sx, sy, ex, ey = clipped
-      steps = Math.max((ex - sx).abs, (ey - sy).abs).ceil.to_i32
-      if steps == 0
-        plot_pixel_if_visible(sx, sy, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
-      else
-        (0..steps).each do |i|
-          t = i.to_f / steps
-          plot_pixel_if_visible(sx + (ex - sx) * t, sy + (ey - sy) * t,
+      first, last = clipped
+      delta_x = end_x - start_x
+      delta_y = end_y - start_y
+      nsteps = Math.max(delta_x.abs, delta_y.abs)
+      sx, sy = start_x + first * delta_x, start_y + first * delta_y
+      ex, ey = start_x + last * delta_x, start_y + last * delta_y
+      plot_pixel_if_visible(sx, sy, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+      if nsteps > 0.0 && nsteps < Int64::MAX.to_f
+        step_x, step_y = delta_x / nsteps, delta_y / nsteps
+        first_step = Math.max(0_i64, (first * nsteps).floor.to_i64 - 1)
+        last_step = Math.min(nsteps.ceil.to_i64, (last * nsteps).ceil.to_i64 + 1)
+        (first_step..last_step).each do |step|
+          plot_pixel_if_visible(start_x + step * step_x, start_y + step * step_y,
             color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
         end
+      elsif nsteps >= Int64::MAX.to_f
+        # The original step index cannot be represented; sample the clipped
+        # portion directly so extremely long lines still cross the canvas.
+        steps = Math.max((ex - sx).abs, (ey - sy).abs).ceil.to_i32
+        if steps > 0
+          (0..steps).each do |step|
+            t = step.to_f / steps
+            plot_pixel_if_visible(sx + (ex - sx) * t, sy + (ey - sy) * t,
+              color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
+          end
+        end
       end
+      plot_pixel_if_visible(ex, ey, color, blend, 0.0, @pixel_width.to_f, 0.0, @pixel_height.to_f)
       self
     end
 

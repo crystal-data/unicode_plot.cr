@@ -95,4 +95,23 @@ describe "audited axis and line behavior" do
       end
     end
   end
+
+  it "keeps the original pixel phase when a vertical line enters the view" do
+    canvas = UnicodePlot::BrailleCanvas.new(15, 40,
+      origin_x: 1.0, origin_y: 1.0, width: 7.0, height: 6.0)
+    canvas.lines!(7.8, 3.5, 7.8, 8.5)
+    canvas.grid_at(5, 39).should eq(0x28b8_u32)
+  end
+
+  it "expands equal finite limits by one unit when representable" do
+    plot = UnicodePlot.lineplot([50.0], [0.0],
+      xlim: {50.0, 50.0}, ylim: {-1.0, 1.0})
+    plot.raw_xlim.should eq({49.0, 51.0})
+
+    large = UnicodePlot.lineplot([1e20], [0.0],
+      xlim: {1e20, 1e20}, ylim: {-1.0, 1.0})
+    lower, upper = large.raw_xlim.not_nil!
+    lower.should be < 1e20
+    upper.should be > 1e20
+  end
 end
